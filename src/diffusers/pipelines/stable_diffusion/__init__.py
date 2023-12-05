@@ -50,6 +50,7 @@ else:
     _import_structure["pipeline_stable_unclip_img2img"] = ["StableUnCLIPImg2ImgPipeline"]
     _import_structure["safety_checker"] = ["StableDiffusionSafetyChecker"]
     _import_structure["stable_unclip_image_normalizer"] = ["StableUnCLIPImageNormalizer"]
+    _import_structure["pipeline_stable_diffusion_clap"] = ["StableDiffusionCLAPPipeline"]
 try:
     if not (is_transformers_available() and is_torch_available() and is_transformers_version(">=", "4.25.0")):
         raise OptionalDependencyNotAvailable()
