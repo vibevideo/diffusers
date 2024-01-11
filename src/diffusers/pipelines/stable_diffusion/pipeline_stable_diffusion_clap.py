@@ -17,7 +17,7 @@ from transformers import (
     CLIPVisionModelWithProjection,
 )
 
-from .pipeline_flax_stable_diffusion import StableDiffusionPipeline
+from .pipeline_stable_diffusion import StableDiffusionPipeline
 
 from ...configuration_utils import FrozenDict
 from diffusers.image_processor import PipelineImageInput, VaeImageProcessor
@@ -27,7 +27,7 @@ from diffusers.loaders import (
     LoraLoaderMixin,
     TextualInversionLoaderMixin,
 )
-from ...models import AutoencoderKL, UNet2DConditionModel
+from ...models import AutoencoderKL, ImageProjection, UNet2DConditionModel
 from ...models.lora import adjust_lora_scale_text_encoder
 from ...schedulers import KarrasDiffusionSchedulers
 from ...utils import (
@@ -165,6 +165,17 @@ class StableDiffusionMusicToImage(
                 "Make sure to define a feature extractor when loading {self.__class__} if you want to use the safety"
                 " checker. If you do not want to use the safety checker, you can pass `'safety_checker=None'` instead."
             )
+
+        self.projection_1 = torch.nn.Sequential(
+            torch.nn.Linear(512, 1024),
+            torch.nn.ReLU(),
+            torch.nn.Linear(1024, 1024),
+        )
+        self.projection_2 = torch.nn.Sequential(
+            torch.nn.Linear(512, 1024),
+            torch.nn.ReLU(),
+            torch.nn.Linear(1024, 1024),
+        )
 
         self.register_modules(
             vae=vae,
@@ -417,30 +428,116 @@ class StableDiffusionMusicToImage(
 
         return prompt_embeds, negative_prompt_embeds
 
-    def encode_audio(self, audio, device):
+    # TODO: finish this out, plz. This should be a lot more complex than what is currently here.
+    #  For example, we should detect if audio_embeds is already added and research if LoRA or something
+    #  similar will apply to this or not.
+    def encode_audio(
+        self,
+        audio: Union[List[float], List[List[float]]] = None,
+        audio_embeds: Optional[torch.FloatTensor] = None,
+        device: str = None,
+    ) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
+        """
+        Prepares audio for the diffusion process. One of `audio` or `audio_embeds`
+        can be provided for the process. If `audio` is provided, then the incoming
+        audio will be encoded. Returns both the encoded audio and the unconditional
+        audio embeddings, as in the image encoding process. This may be dropped.
+
+        Args:
+            audio (Union[List[float], List[List[float]]], optional): if nested list provided, list must batch_size. Defaults to None.
+            audio_embeds (Optional[torch.FloatTensor], optional): pre computed audio embeddings. Defaults to None.
+            device (str, optional): device to use for training/inference. Defaults to None.
+
+        Raises:
+            ValueError: raised if no device is provided.
+
+        Returns:
+            Tuple[torch.FloatTensor, torch.FloatTensor]: audio_embeddings, unconditional_audio_embeddings
+        """
+        if device is None:
+            raise ValueError("Please provide a device to encode audio on.")
         dtype = next(self.audio_encoder.parameters()).dtype
 
-        # FIXME: Verify this line works, input_values is an unknown output.
-        if not isinstance(audio, torch.Tensor):
-            audio = self.audio_extractor(audio, return_tensors="pt").input_values
+        if audio_embeds is not None:
+            audio_embeddings = audio_embeds.to(device=device, dtype=dtype)
+        else:
+            if not isinstance(audio, torch.Tensor):
+                audio = self.audio_extractor(audio, return_tensors="pt").input_values
 
-        audio = audio.to(device=device, dtype=dtype)
-        audio_embeddings = self.audio_encoder(audio)
+            audio = audio.to(device=device, dtype=dtype)
+            audio_embeddings = self.audio_encoder(audio)
+
         uncond_audio_embeds = torch.zeros_like(audio_embeddings)
         return audio_embeddings, uncond_audio_embeds
 
-    def encode_image(self, image, device, num_images_per_prompt):
+    def simple_project_audio(
+        self,
+        audio_embeds: torch.FloatTensor,
+        unconditional_audio_embeds: torch.Tensor,
+        prompt_embeds: torch.FloatTensor,
+        negative_prompt_embeds: torch.FloatTensor,
+    ) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
+        """Simplified projection of audio embeddings. This simply replaces the final
+        embedding of the incoming text prompts with the clap embeddings. Adds for both
+        negative and positive prompts.
+
+        Args:
+            audio_embeds (torch.FloatTensor): audio embeddings
+            unconditional_audio_embeds (torch.Tensor): unconditional audio embeddings
+            prompt_embeds (torch.FloatTensor): prompt embeddings
+            negative_prompt_embeds (torch.FloatTensor): negative prompt embeddings
+
+        Returns:
+            Tuple[torch.FloatTensor, torch.FloatTensor]: prompt embeds with the final embedding replaced by the auddio embeddings
+        """
+        if audio_embeds.shape[0] != prompt_embeds.shape[0]:
+            raise ValueError(
+                f"Audio embeddings and prompt embeddings must have the same batch size, but got {audio_embeds.shape[0]} != {prompt_embeds.shape[0]}."
+            )
+        if unconditional_audio_embeds.shape[0] != negative_prompt_embeds.shape[0]:
+            raise ValueError(
+                f"Unconditional audio embeddings and negative prompt embeddings must have the same batch size, but got {unconditional_audio_embeds.shape[0]} != {negative_prompt_embeds.shape[0]}."
+            )
+
+        audio_embeds = self.projection_1(audio_embeds)
+        unconditional_audio_embeds = self.projection_2(unconditional_audio_embeds)
+
+        prompt_embeds[:, -1, :] = audio_embeds
+        negative_prompt_embeds[:, -1, :] = unconditional_audio_embeds
+
+        return prompt_embeds, negative_prompt_embeds
+
+    def encode_image(
+        self, image, device, num_images_per_prompt, output_hidden_states=None
+    ):
         dtype = next(self.image_encoder.parameters()).dtype
 
         if not isinstance(image, torch.Tensor):
             image = self.feature_extractor(image, return_tensors="pt").pixel_values
 
         image = image.to(device=device, dtype=dtype)
-        image_embeds = self.image_encoder(image).image_embeds
-        image_embeds = image_embeds.repeat_interleave(num_images_per_prompt, dim=0)
+        if output_hidden_states:
+            image_enc_hidden_states = self.image_encoder(
+                image, output_hidden_states=True
+            ).hidden_states[-2]
+            image_enc_hidden_states = image_enc_hidden_states.repeat_interleave(
+                num_images_per_prompt, dim=0
+            )
+            uncond_image_enc_hidden_states = self.image_encoder(
+                torch.zeros_like(image), output_hidden_states=True
+            ).hidden_states[-2]
+            uncond_image_enc_hidden_states = (
+                uncond_image_enc_hidden_states.repeat_interleave(
+                    num_images_per_prompt, dim=0
+                )
+            )
+            return image_enc_hidden_states, uncond_image_enc_hidden_states
+        else:
+            image_embeds = self.image_encoder(image).image_embeds
+            image_embeds = image_embeds.repeat_interleave(num_images_per_prompt, dim=0)
+            uncond_image_embeds = torch.zeros_like(image_embeds)
 
-        uncond_image_embeds = torch.zeros_like(image_embeds)
-        return image_embeds, uncond_image_embeds
+            return image_embeds, uncond_image_embeds
 
     def run_safety_checker(self, image, device, dtype):
         if self.safety_checker is None:
@@ -485,12 +582,14 @@ class StableDiffusionMusicToImage(
     def check_inputs(
         self,
         prompt,
+        audio,
         height,
         width,
         callback_steps,
         negative_prompt=None,
         prompt_embeds=None,
         negative_prompt_embeds=None,
+        audio_embeds=None,
         callback_on_step_end_tensor_inputs=None,
     ):
         if height % 8 != 0 or width % 8 != 0:
@@ -542,6 +641,25 @@ class StableDiffusionMusicToImage(
                     f" got: `prompt_embeds` {prompt_embeds.shape} != `negative_prompt_embeds`"
                     f" {negative_prompt_embeds.shape}."
                 )
+
+        if audio is not None and audio_embeds is not None:
+            raise ValueError(
+                f"Cannot forward both `audio`: {audio} and `audio_embeds: {audio_embeds}. Please make sure to"
+                f"only forward one of the two."
+            )
+        elif audio is not None and (
+            not isinstance(audio, list) and not isinstance(audio, torch.FloatTensor)
+        ):
+            raise ValueError(
+                f"`audio` has to be of type `list` or `torch.FloatTensor` but is {type(audio)}"
+            )
+
+        elif audio_embeds is not None and (
+            not isinstance(audio_embeds, torch.FloatTensor)
+        ):
+            raise ValueError(
+                f"`audio_embeds` must be of type `torch.FloatTensor` but is `{type(audio_embeds)}`"
+            )
 
     def prepare_latents(
         self,
@@ -692,6 +810,7 @@ class StableDiffusionMusicToImage(
     def __call__(
         self,
         prompt: Union[str, List[str]] = None,
+        audio: Union[List[float], List[List[float]], torch.FloatTensor] = None,
         height: Optional[int] = None,
         width: Optional[int] = None,
         num_inference_steps: int = 50,
@@ -704,6 +823,7 @@ class StableDiffusionMusicToImage(
         latents: Optional[torch.FloatTensor] = None,
         prompt_embeds: Optional[torch.FloatTensor] = None,
         negative_prompt_embeds: Optional[torch.FloatTensor] = None,
+        audio_embeds: Optional[torch.FloatTensor] = None,
         ip_adapter_image: Optional[PipelineImageInput] = None,
         output_type: Optional[str] = "pil",
         return_dict: bool = True,
@@ -717,7 +837,240 @@ class StableDiffusionMusicToImage(
         r"""
         Examples:
         """
-        pass
+        callback = kwargs.pop("callback", None)
+        callback_steps = kwargs.pop("callback_steps", None)
+
+        if callback is not None:
+            deprecate(
+                "callback",
+                "1.0.0",
+                "Passing `callback` as an input argument to `__call__` is deprecated, consider using `callback_on_step_end`",
+            )
+        if callback_steps is not None:
+            deprecate(
+                "callback_steps",
+                "1.0.0",
+                "Passing `callback` as an input argument to `__call__` is deprecated, consider using `callback_on_step_end`",
+            )
+
+        # 0. Default height and width to unet
+        height = height or self.unet.config.sample_size * self.vae_scale_factor
+        width = width or self.unet.config.sample_size * self.vae_scale_factor
+        # to deal with lora scaling and other possible forward hooks
+
+        # 1. Check inputs, Raise error if not correct
+        self.check_inputs(
+            prompt,
+            audio,
+            height,
+            width,
+            callback_steps,
+            negative_prompt,
+            prompt_embeds,
+            negative_prompt_embeds,
+            audio_embeds,
+            callback_on_step_end_tensor_inputs,
+        )
+
+        self._guidance_scale = guidance_scale
+        self._guidance_rescale = guidance_rescale
+        self._clip_skip = clip_skip
+        self._cross_attention_kwargs = cross_attention_kwargs
+
+        # 2. Define call parameters
+        if prompt is not None and isinstance(prompt, str):
+            batch_size = 1
+        elif prompt is not None and isinstance(prompt, list):
+            batch_size = len(prompt)
+        else:
+            batch_size = prompt_embeds.shape[0]
+
+        device = self._execution_device
+
+        # 3. Encode input prompt
+        lora_scale = (
+            self.cross_attention_kwargs.get("scale", None)
+            if self.cross_attention_kwargs is not None
+            else None
+        )
+
+        prompt_embeds, negative_prompt_embeds = self.encode_prompt(
+            prompt,
+            device,
+            num_images_per_prompt,
+            self.do_classifier_free_guidance,
+            negative_prompt,
+            prompt_embeds=prompt_embeds,
+            negative_prompt_embeds=negative_prompt_embeds,
+            lora_scale=lora_scale,
+            clip_skip=self.clip_skip,
+        )
+
+        # 3.1 Encode and project input audio
+        audio_embeds, unconditional_audio_embeds = self.encode_audio(
+            audio, audio_embeds, device
+        )
+
+        # 3.2 combine CLAP embeddings
+        prompt_embeds, negative_prompt_embeds = self.simple_project_audio(
+            audio_embeds,
+            unconditional_audio_embeds,
+            prompt_embeds,
+            negative_prompt_embeds,
+        )
+
+        # 3.3 classifier free guidance
+        if self.do_classifier_free_guidance:
+            prompt_embeds = torch.cat([prompt_embeds, negative_prompt_embeds])
+
+        if ip_adapter_image is not None:
+            output_hidden_state = (
+                False
+                if isinstance(self.unet.encoder_hid_proj, ImageProjection)
+                else True
+            )
+            image_embeds, negative_image_embeds = self.encode_image(
+                ip_adapter_image, device, num_images_per_prompt, output_hidden_state
+            )
+            if self.do_classifier_free_guidance:
+                image_embeds = torch.cat([negative_image_embeds, image_embeds])
+
+        # 4. Prepare timesteps
+        timesteps, num_inference_steps = retrieve_timesteps(
+            self.scheuler, num_inference_steps, device, timesteps
+        )
+
+        # 5. prepare latent variables
+        num_channels_latents = self.unet.config.in_channels
+        latents = self.prepare_latents(
+            batch_size * num_images_per_prompt,
+            num_channels_latents,
+            height,
+            width,
+            prompt_embeds.dtype,
+            device,
+            generator,
+            latents,
+        )
+
+        # 6. Prepare extra steps kwargs
+        extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
+
+        # 6.1 Add image embeds for IP-Adapter
+        added_cond_kwargs = (
+            {"image_embeds": image_embeds} if ip_adapter_image is not None else None
+        )
+
+        # 6.2 Optionally get Guidance Scale embedding
+        timestep_cond = None
+        if self.unet.config.time_cond_proj_dim is not None:
+            guidance_scale_tensor = torch.tensor(self.guidance_scale - 1).repeat(
+                batch_size * num_images_per_prompt
+            )
+            timestep_cond = self.get_guidance_scale_embedding(
+                guidance_scale_tensor, embedding_dim=self.unet.config.time_cond_proj_dim
+            ).to(device=device, dtype=latents.dtype)
+
+        # 7. Denoising loop
+        num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
+        self._num_timesteps = len(timesteps)
+        with self.progress_bar(total=num_inference_steps) as progress_bar:
+            for i, t in enumerate(timesteps):
+                # expand the latents if we are doing CFG
+                latent_model_input = (
+                    torch.cat([latents] * 2)
+                    if self.do_classifier_free_guidance
+                    else latents
+                )
+                latent_model_input = self.scheduler.scale_model_input(
+                    latent_model_input, t
+                )
+
+                # predict the noise residual
+                noise_pred = self.unet(
+                    latent_model_input,
+                    t,
+                    encoder_hidden_states=prompt_embeds,
+                    timestep_cond=timestep_cond,
+                    cross_attention_kwargs=self.cross_attention_kwargs,
+                    added_cond_kwargs=added_cond_kwargs,
+                    return_dict=False,
+                )[0]
+
+                # perform guidance
+                if self.do_classifier_free_guidance:
+                    noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
+                    noise_pred = (
+                        noise_pred_uncond
+                        * self.guidance_scale
+                        * (noise_pred_text - noise_pred_uncond)
+                    )
+
+                if self.do_classifier_free_guidance and self.guidance_rescale > 0.0:
+                    # Based on 3.4. in https://arxiv.org/pdf/2305.08891.pdf
+                    noise_pred = rescale_noise_cfg(
+                        noise_pred,
+                        noise_pred_text,
+                        guidance_rescale=self.guidance_rescale,
+                    )
+
+                # compute the previous noise samnple x_t -> x_t-1
+                latents = self.scheduler.step(
+                    noise_pred, t, latents, **extra_step_kwargs, return_dict=False
+                )[0]
+
+                if callback_on_step_end is not None:
+                    callback_kwargs = {}
+                    for k in callback_on_step_end_tensor_inputs:
+                        callback_kwargs[k] = locals()[k]
+                    callback_outputs = callback_on_step_end(self, i, t, callback_kwargs)
+
+                    latents = callback_outputs.pop("latents", latents)
+                    prompt_embeds = callback_outputs.pop("prompt_embeds", prompt_embeds)
+                    negative_prompt_embeds = callback_outputs.pop(
+                        "negative_prompt_embeds", negative_prompt_embeds
+                    )
+
+                # call the callback if provided
+                if i == len(timesteps) - 1 or (
+                    (i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0
+                ):
+                    progress_bar.update()
+                    if callback is not None and i % callback_steps == 0:
+                        step_idx = i // getattr(self.scheduler, "order", 1)
+                        callback(step_idx, t, latents)
+        if not output_type == "latent":
+            image = self.vae.decode(
+                latents / self.vae.config.scaling_factor,
+                return_dict=False,
+                generator=generator,
+            )[0]
+            image, has_nsfw_concept = self.run_safety_checker(
+                image, device, prompt_embeds.dtype
+            )
+
+        else:
+            image = latents
+            has_nsfw_concept = None
+
+        if has_nsfw_concept is None:
+            do_denormalize = [True] * image.shape[0]
+        else:
+            do_denormalize = [not has_nsfw for has_nsfw in has_nsfw_concept]
+
+        image = self.image_processor.postprocess(
+            image, output_type=output_type, do_denormalize=do_denormalize
+        )
+
+        # Offload all models and return
+        self.maybe_free_model_hooks()
+
+        if not return_dict:
+            return (image, has_nsfw_concept)
+
+        return StableDiffusionPipelineOutput(
+            images=image, nsfw_content_detected=has_nsfw_concept
+        )
 
 
 if __name__ == "__main__":
