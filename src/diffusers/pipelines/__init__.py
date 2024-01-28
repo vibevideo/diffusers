@@ -142,6 +142,7 @@ else:
             "CycleDiffusionPipeline",
             "StableDiffusionAttendAndExcitePipeline",
             "StableDiffusionDepth2ImgPipeline",
+            "StableDiffusionCLAPPipeline",
             "StableDiffusionDiffEditPipeline",
             "StableDiffusionGLIGENPipeline",
             "StableDiffusionGLIGENPipeline",
@@ -213,12 +214,16 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["onnx_utils"] = ["OnnxRuntimeModel"]
 try:
-    if not (is_torch_available() and is_transformers_available() and is_onnx_available()):
+    if not (
+        is_torch_available() and is_transformers_available() and is_onnx_available()
+    ):
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     from ..utils import dummy_torch_and_transformers_and_onnx_objects  # noqa F403
 
-    _dummy_objects.update(get_objects_from_module(dummy_torch_and_transformers_and_onnx_objects))
+    _dummy_objects.update(
+        get_objects_from_module(dummy_torch_and_transformers_and_onnx_objects)
+    )
 else:
     _import_structure["stable_diffusion"].extend(
         [
@@ -232,14 +237,20 @@ else:
     )
 
 try:
-    if not (is_torch_available() and is_transformers_available() and is_k_diffusion_available()):
+    if not (
+        is_torch_available()
+        and is_transformers_available()
+        and is_k_diffusion_available()
+    ):
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     from ..utils import (
         dummy_torch_and_transformers_and_k_diffusion_objects,
     )
 
-    _dummy_objects.update(get_objects_from_module(dummy_torch_and_transformers_and_k_diffusion_objects))
+    _dummy_objects.update(
+        get_objects_from_module(dummy_torch_and_transformers_and_k_diffusion_objects)
+    )
 else:
     _import_structure["stable_diffusion"].extend(["StableDiffusionKDiffusionPipeline"])
 try:
@@ -273,12 +284,16 @@ else:
         ]
     )
 try:
-    if not (is_transformers_available() and is_torch_available() and is_note_seq_available()):
+    if not (
+        is_transformers_available() and is_torch_available() and is_note_seq_available()
+    ):
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     from ..utils import dummy_transformers_and_torch_and_note_seq_objects  # noqa F403
 
-    _dummy_objects.update(get_objects_from_module(dummy_transformers_and_torch_and_note_seq_objects))
+    _dummy_objects.update(
+        get_objects_from_module(dummy_transformers_and_torch_and_note_seq_objects)
+    )
 else:
     _import_structure["spectrogram_diffusion"] = [
         "MidiProcessor",
@@ -392,8 +407,10 @@ if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
         from .shap_e import ShapEImg2ImgPipeline, ShapEPipeline
         from .stable_diffusion import (
             CLIPImageProjection,
+            ClapClipProjection,
             CycleDiffusionPipeline,
             StableDiffusionAttendAndExcitePipeline,
+            StableDiffusionCLAPPipeline,
             StableDiffusionDepth2ImgPipeline,
             StableDiffusionDiffEditPipeline,
             StableDiffusionGLIGENPipeline,
@@ -463,7 +480,11 @@ if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
             from .onnx_utils import OnnxRuntimeModel
 
         try:
-            if not (is_torch_available() and is_transformers_available() and is_onnx_available()):
+            if not (
+                is_torch_available()
+                and is_transformers_available()
+                and is_onnx_available()
+            ):
                 raise OptionalDependencyNotAvailable()
         except OptionalDependencyNotAvailable:
             from ..utils.dummy_torch_and_transformers_and_onnx_objects import *
@@ -478,7 +499,11 @@ if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
             )
 
         try:
-            if not (is_torch_available() and is_transformers_available() and is_k_diffusion_available()):
+            if not (
+                is_torch_available()
+                and is_transformers_available()
+                and is_k_diffusion_available()
+            ):
                 raise OptionalDependencyNotAvailable()
         except OptionalDependencyNotAvailable:
             from ..utils.dummy_torch_and_transformers_and_k_diffusion_objects import *
@@ -510,7 +535,11 @@ if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
             )
 
         try:
-            if not (is_transformers_available() and is_torch_available() and is_note_seq_available()):
+            if not (
+                is_transformers_available()
+                and is_torch_available()
+                and is_note_seq_available()
+            ):
                 raise OptionalDependencyNotAvailable()
         except OptionalDependencyNotAvailable:
             from ..utils.dummy_transformers_and_torch_and_note_seq_objects import *  # noqa F403

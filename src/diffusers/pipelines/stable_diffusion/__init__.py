@@ -32,38 +32,83 @@ else:
     _import_structure["clip_image_project_model"] = ["CLIPImageProjection"]
     _import_structure["pipeline_cycle_diffusion"] = ["CycleDiffusionPipeline"]
     _import_structure["pipeline_stable_diffusion"] = ["StableDiffusionPipeline"]
-    _import_structure["pipeline_stable_diffusion_attend_and_excite"] = ["StableDiffusionAttendAndExcitePipeline"]
-    _import_structure["pipeline_stable_diffusion_gligen"] = ["StableDiffusionGLIGENPipeline"]
-    _import_structure["pipeline_stable_diffusion_gligen_text_image"] = ["StableDiffusionGLIGENTextImagePipeline"]
-    _import_structure["pipeline_stable_diffusion_img2img"] = ["StableDiffusionImg2ImgPipeline"]
-    _import_structure["pipeline_stable_diffusion_inpaint"] = ["StableDiffusionInpaintPipeline"]
-    _import_structure["pipeline_stable_diffusion_inpaint_legacy"] = ["StableDiffusionInpaintPipelineLegacy"]
-    _import_structure["pipeline_stable_diffusion_instruct_pix2pix"] = ["StableDiffusionInstructPix2PixPipeline"]
-    _import_structure["pipeline_stable_diffusion_latent_upscale"] = ["StableDiffusionLatentUpscalePipeline"]
-    _import_structure["pipeline_stable_diffusion_ldm3d"] = ["StableDiffusionLDM3DPipeline"]
-    _import_structure["pipeline_stable_diffusion_model_editing"] = ["StableDiffusionModelEditingPipeline"]
-    _import_structure["pipeline_stable_diffusion_panorama"] = ["StableDiffusionPanoramaPipeline"]
-    _import_structure["pipeline_stable_diffusion_paradigms"] = ["StableDiffusionParadigmsPipeline"]
+    _import_structure["pipeline_stable_diffusion_attend_and_excite"] = [
+        "StableDiffusionAttendAndExcitePipeline"
+    ]
+    _import_structure["pipeline_stable_diffusion_gligen"] = [
+        "StableDiffusionGLIGENPipeline"
+    ]
+    _import_structure["pipeline_stable_diffusion_gligen_text_image"] = [
+        "StableDiffusionGLIGENTextImagePipeline"
+    ]
+    _import_structure["pipeline_stable_diffusion_img2img"] = [
+        "StableDiffusionImg2ImgPipeline"
+    ]
+    _import_structure["pipeline_stable_diffusion_inpaint"] = [
+        "StableDiffusionInpaintPipeline"
+    ]
+    _import_structure["pipeline_stable_diffusion_inpaint_legacy"] = [
+        "StableDiffusionInpaintPipelineLegacy"
+    ]
+    _import_structure["pipeline_stable_diffusion_instruct_pix2pix"] = [
+        "StableDiffusionInstructPix2PixPipeline"
+    ]
+    _import_structure["pipeline_stable_diffusion_latent_upscale"] = [
+        "StableDiffusionLatentUpscalePipeline"
+    ]
+    _import_structure["pipeline_stable_diffusion_ldm3d"] = [
+        "StableDiffusionLDM3DPipeline"
+    ]
+    _import_structure["pipeline_stable_diffusion_model_editing"] = [
+        "StableDiffusionModelEditingPipeline"
+    ]
+    _import_structure["pipeline_stable_diffusion_panorama"] = [
+        "StableDiffusionPanoramaPipeline"
+    ]
+    _import_structure["pipeline_stable_diffusion_paradigms"] = [
+        "StableDiffusionParadigmsPipeline"
+    ]
     _import_structure["pipeline_stable_diffusion_sag"] = ["StableDiffusionSAGPipeline"]
-    _import_structure["pipeline_stable_diffusion_upscale"] = ["StableDiffusionUpscalePipeline"]
+    _import_structure["pipeline_stable_diffusion_upscale"] = [
+        "StableDiffusionUpscalePipeline"
+    ]
     _import_structure["pipeline_stable_unclip"] = ["StableUnCLIPPipeline"]
-    _import_structure["pipeline_stable_unclip_img2img"] = ["StableUnCLIPImg2ImgPipeline"]
+    _import_structure["pipeline_stable_unclip_img2img"] = [
+        "StableUnCLIPImg2ImgPipeline"
+    ]
     _import_structure["safety_checker"] = ["StableDiffusionSafetyChecker"]
-    _import_structure["stable_unclip_image_normalizer"] = ["StableUnCLIPImageNormalizer"]
-    _import_structure["pipeline_stable_diffusion_clap"] = ["StableDiffusionCLAPPipeline"]
+    _import_structure["stable_unclip_image_normalizer"] = [
+        "StableUnCLIPImageNormalizer"
+    ]
+    _import_structure["pipeline_stable_diffusion_clap"] = [
+        "StableDiffusionCLAPPipeline",
+        "ClapClipProjection",
+    ]
 try:
-    if not (is_transformers_available() and is_torch_available() and is_transformers_version(">=", "4.25.0")):
+    if not (
+        is_transformers_available()
+        and is_torch_available()
+        and is_transformers_version(">=", "4.25.0")
+    ):
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     from ...utils.dummy_torch_and_transformers_objects import (
         StableDiffusionImageVariationPipeline,
     )
 
-    _dummy_objects.update({"StableDiffusionImageVariationPipeline": StableDiffusionImageVariationPipeline})
+    _dummy_objects.update(
+        {"StableDiffusionImageVariationPipeline": StableDiffusionImageVariationPipeline}
+    )
 else:
-    _import_structure["pipeline_stable_diffusion_image_variation"] = ["StableDiffusionImageVariationPipeline"]
+    _import_structure["pipeline_stable_diffusion_image_variation"] = [
+        "StableDiffusionImageVariationPipeline"
+    ]
 try:
-    if not (is_transformers_available() and is_torch_available() and is_transformers_version(">=", "4.26.0")):
+    if not (
+        is_transformers_available()
+        and is_torch_available()
+        and is_transformers_version(">=", "4.26.0")
+    ):
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     from ...utils.dummy_torch_and_transformers_objects import (
@@ -80,9 +125,15 @@ except OptionalDependencyNotAvailable:
         }
     )
 else:
-    _import_structure["pipeline_stable_diffusion_depth2img"] = ["StableDiffusionDepth2ImgPipeline"]
-    _import_structure["pipeline_stable_diffusion_diffedit"] = ["StableDiffusionDiffEditPipeline"]
-    _import_structure["pipeline_stable_diffusion_pix2pix_zero"] = ["StableDiffusionPix2PixZeroPipeline"]
+    _import_structure["pipeline_stable_diffusion_depth2img"] = [
+        "StableDiffusionDepth2ImgPipeline"
+    ]
+    _import_structure["pipeline_stable_diffusion_diffedit"] = [
+        "StableDiffusionDiffEditPipeline"
+    ]
+    _import_structure["pipeline_stable_diffusion_pix2pix_zero"] = [
+        "StableDiffusionPix2PixZeroPipeline"
+    ]
 try:
     if not (
         is_torch_available()
@@ -96,9 +147,13 @@ except OptionalDependencyNotAvailable:
         dummy_torch_and_transformers_and_k_diffusion_objects,
     )
 
-    _dummy_objects.update(get_objects_from_module(dummy_torch_and_transformers_and_k_diffusion_objects))
+    _dummy_objects.update(
+        get_objects_from_module(dummy_torch_and_transformers_and_k_diffusion_objects)
+    )
 else:
-    _import_structure["pipeline_stable_diffusion_k_diffusion"] = ["StableDiffusionKDiffusionPipeline"]
+    _import_structure["pipeline_stable_diffusion_k_diffusion"] = [
+        "StableDiffusionKDiffusionPipeline"
+    ]
 try:
     if not (is_transformers_available() and is_onnx_available()):
         raise OptionalDependencyNotAvailable()
@@ -111,18 +166,32 @@ else:
         "OnnxStableDiffusionPipeline",
         "StableDiffusionOnnxPipeline",
     ]
-    _import_structure["pipeline_onnx_stable_diffusion_img2img"] = ["OnnxStableDiffusionImg2ImgPipeline"]
-    _import_structure["pipeline_onnx_stable_diffusion_inpaint"] = ["OnnxStableDiffusionInpaintPipeline"]
-    _import_structure["pipeline_onnx_stable_diffusion_inpaint_legacy"] = ["OnnxStableDiffusionInpaintPipelineLegacy"]
-    _import_structure["pipeline_onnx_stable_diffusion_upscale"] = ["OnnxStableDiffusionUpscalePipeline"]
+    _import_structure["pipeline_onnx_stable_diffusion_img2img"] = [
+        "OnnxStableDiffusionImg2ImgPipeline"
+    ]
+    _import_structure["pipeline_onnx_stable_diffusion_inpaint"] = [
+        "OnnxStableDiffusionInpaintPipeline"
+    ]
+    _import_structure["pipeline_onnx_stable_diffusion_inpaint_legacy"] = [
+        "OnnxStableDiffusionInpaintPipelineLegacy"
+    ]
+    _import_structure["pipeline_onnx_stable_diffusion_upscale"] = [
+        "OnnxStableDiffusionUpscalePipeline"
+    ]
 
 if is_transformers_available() and is_flax_available():
     from ...schedulers.scheduling_pndm_flax import PNDMSchedulerState
 
     _additional_imports.update({"PNDMSchedulerState": PNDMSchedulerState})
-    _import_structure["pipeline_flax_stable_diffusion"] = ["FlaxStableDiffusionPipeline"]
-    _import_structure["pipeline_flax_stable_diffusion_img2img"] = ["FlaxStableDiffusionImg2ImgPipeline"]
-    _import_structure["pipeline_flax_stable_diffusion_inpaint"] = ["FlaxStableDiffusionInpaintPipeline"]
+    _import_structure["pipeline_flax_stable_diffusion"] = [
+        "FlaxStableDiffusionPipeline"
+    ]
+    _import_structure["pipeline_flax_stable_diffusion_img2img"] = [
+        "FlaxStableDiffusionImg2ImgPipeline"
+    ]
+    _import_structure["pipeline_flax_stable_diffusion_inpaint"] = [
+        "FlaxStableDiffusionInpaintPipeline"
+    ]
     _import_structure["safety_checker_flax"] = ["FlaxStableDiffusionSafetyChecker"]
 
 if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
@@ -140,6 +209,10 @@ if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
             StableDiffusionPipeline,
             StableDiffusionPipelineOutput,
             StableDiffusionSafetyChecker,
+        )
+        from .pipeline_stable_diffusion_clap import (
+            StableDiffusionCLAPPipeline,
+            ClapClipProjection,
         )
         from .pipeline_stable_diffusion_attend_and_excite import (
             StableDiffusionAttendAndExcitePipeline,
@@ -175,7 +248,11 @@ if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
         from .stable_unclip_image_normalizer import StableUnCLIPImageNormalizer
 
     try:
-        if not (is_transformers_available() and is_torch_available() and is_transformers_version(">=", "4.25.0")):
+        if not (
+            is_transformers_available()
+            and is_torch_available()
+            and is_transformers_version(">=", "4.25.0")
+        ):
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         from ...utils.dummy_torch_and_transformers_objects import (
@@ -187,7 +264,11 @@ if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
         )
 
     try:
-        if not (is_transformers_available() and is_torch_available() and is_transformers_version(">=", "4.26.0")):
+        if not (
+            is_transformers_available()
+            and is_torch_available()
+            and is_transformers_version(">=", "4.26.0")
+        ):
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         from ...utils.dummy_torch_and_transformers_objects import (
