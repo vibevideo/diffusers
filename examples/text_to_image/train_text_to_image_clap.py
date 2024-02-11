@@ -869,12 +869,16 @@ def main():
             transforms.Resize(
                 args.resolution, interpolation=transforms.InterpolationMode.BILINEAR
             ),
-            transforms.CenterCrop(args.resolution)
-            if args.center_crop
-            else transforms.RandomCrop(args.resolution),
-            transforms.RandomHorizontalFlip()
-            if args.random_flip
-            else transforms.Lambda(lambda x: x),
+            (
+                transforms.CenterCrop(args.resolution)
+                if args.center_crop
+                else transforms.RandomCrop(args.resolution)
+            ),
+            (
+                transforms.RandomHorizontalFlip()
+                if args.random_flip
+                else transforms.Lambda(lambda x: x)
+            ),
             transforms.ToTensor(),
             transforms.Normalize([0.5], [0.5]),
         ]
