@@ -120,55 +120,6 @@ def retrieve_timesteps(
     return timesteps, num_inference_steps
 
 
-class ClapClipProjectionConfig(PretrainedConfig):
-    def __init__(self, clap_out_size=512, clip_in_size=1024, **kwargs):
-        super().__init__(**kwargs)
-        self.clap_out_size = clap_out_size
-        self.clip_in_size = clip_in_size
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        if pretrained_model_name_or_path is not None:
-            if "clap_out_size" not in kwargs:
-                raise ValueError(
-                    "When passing a pretrained model name or path, make sure to also pass `clap_out_size`."
-                )
-            if "clip_in_size" not in kwargs:
-                raise ValueError(
-                    "When passing a pretrained model name or path, make sure to also pass `clip_in_size`."
-                )
-        return cls(**kwargs)
-
-
-class ClapClipProjection(PreTrainedModel):
-    def __init__(self, config: ClapClipProjectionConfig = None):
-        super().__init__(config=config)
-        if config is None:
-            # load default config
-            config = ClapClipProjectionConfig()
-        self.config = config
-        in_size = config.clap_out_size
-        out_size = config.clip_in_size
-
-        self.linear1 = torch.nn.Linear(in_size, out_size)
-        self.activation = torch.nn.GELU()
-        self.linear2 = torch.nn.Linear(out_size, out_size)
-
-    def forward(self, x):
-        x = self.linear1(x)
-        x = self.activation(x)
-        x = self.linear2(x)
-        return x
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_or_path, config=None, **kwargs):
-        if config is None:
-            config = ClapClipProjectionConfig()
-        return super().from_pretrained(
-            pretrained_model_or_path, config=config, **kwargs
-        )
-
-
 # adapted from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion
 class StableDiffusionCLAPPipeline(
     DiffusionPipeline,
@@ -195,10 +146,6 @@ class StableDiffusionCLAPPipeline(
         feature_extractor: CLIPImageProcessor,
         audio_processor: ClapProcessor,
         audio_encoder: ClapAudioModelWithProjection,
-        clap_text_encoder: ClapTextModel,
-        clap_text_tokenizer: AutoTokenizer,
-        audio_embed_projection: ClapClipProjection,
-        uncond_audio_embed_projection: ClapClipProjection,
         image_encoder: CLIPVisionModelWithProjection = None,
         requires_safety_checker: bool = True,
     ):
@@ -230,10 +177,6 @@ class StableDiffusionCLAPPipeline(
             image_encoder=image_encoder,
             audio_encoder=audio_encoder,
             audio_processor=audio_processor,
-            clap_text_encoder=clap_text_encoder,
-            clap_text_tokenizer=clap_text_tokenizer,
-            audio_embed_projection=audio_embed_projection,
-            uncond_audio_embed_projection=uncond_audio_embed_projection,
         )
 
         self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
@@ -542,13 +485,6 @@ class StableDiffusionCLAPPipeline(
             raise ValueError(
                 f"Unconditional audio embeddings and negative prompt embeddings must have the same batch size, but got {unconditional_audio_embeds.shape[0]} != {negative_prompt_embeds.shape[0]}."
             )
-
-        audio_embeds = self.audio_embed_projection(audio_embeds)
-        # TODO: probably don't need this since the unconditional audio embeds are
-        #  zeroes. Can probably just create an uncond here with zeros_like.
-        unconditional_audio_embeds = self.uncond_audio_embed_projection(
-            unconditional_audio_embeds
-        )
 
         prompt_embeds[:, -1, :] = audio_embeds
         negative_prompt_embeds[:, -1, :] = unconditional_audio_embeds
