@@ -6,14 +6,9 @@ from packaging import version
 from transformers import (
     AutoTokenizer,
     AutoProcessor,
+    AutoModel,
     ClapAudioModel,
-    ClapAudioModelWithProjection,
-    ClapProcessor,
-    ClapTextModel,
-    ClapTextModelWithProjection,
     CLIPImageProcessor,
-    CLIPTextModel,
-    CLIPTokenizer,
     CLIPVisionModelWithProjection,
     PreTrainedModel,
     PretrainedConfig,
@@ -144,8 +139,8 @@ class StableDiffusionCLAPPipeline(
         scheduler: KarrasDiffusionSchedulers,
         safety_checker: StableDiffusionSafetyChecker,
         feature_extractor: CLIPImageProcessor,
-        audio_processor: ClapProcessor,
-        audio_encoder: ClapAudioModelWithProjection,
+        audio_processor: AutoProcessor,
+        audio_encoder: ClapAudioModel,
         image_encoder: CLIPVisionModelWithProjection = None,
         requires_safety_checker: bool = True,
     ):
@@ -449,10 +444,10 @@ class StableDiffusionCLAPPipeline(
             audio_embeddings = audio_embeds.to(device=device, dtype=dtype)
         else:
             if not isinstance(audio, torch.Tensor):
-                audio = self.audio_extractor(audio, return_tensors="pt").input_values
+                audio = self.audio_processor(audio, return_tensors="pt").input_values
 
             audio = audio.to(device=device, dtype=dtype)
-            audio_embeddings = self.audio_encoder(audio)
+            audio_embeddings = self.audio_encoder(**audio)
 
         uncond_audio_embeds = torch.zeros_like(audio_embeddings)
         return audio_embeddings, uncond_audio_embeds
