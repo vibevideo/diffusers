@@ -10,6 +10,8 @@ from transformers import (
     ClapAudioModel,
     CLIPImageProcessor,
     CLIPVisionModelWithProjection,
+    CLIPTextModel,
+    CLIPTokenizer,
     PreTrainedModel,
     PretrainedConfig,
 )
@@ -701,34 +703,6 @@ class StableDiffusionCLAPPipeline(
         """Disables the FreeU mechanism if enabled."""
         self.unet.disable_freeu()
 
-    def add_audio_models(
-        self,
-        audio_encoder: ClapAudioModelWithProjection,
-        audio_processor: ClapProcessor,
-        clap_text_encoder: ClapTextModel,
-        clap_text_tokenizer: AutoTokenizer,
-    ):
-        r"""
-        Adds audio models to the pipeline.
-
-        Args:
-            audio_encoder (`ClapAudioModelWithProjection`):
-                The audio encoder model.
-            audio_processor (`ClapProcessor`):
-                The audio processor.
-            clap_text_encoder (`ClapTextModel`):
-                The CLAP text encoder.
-            clap_text_tokenizer (`AutoTokenizer`):
-                The CLAP tokenizer.
-        """
-
-        self.register_modules(
-            audio_encoder=audio_encoder,
-            audio_processor=audio_processor,
-            clap_text_encoder=clap_text_encoder,
-            clap_text_tokenizer=clap_text_tokenizer,
-        )
-
     # Copied from diffusers.pipelines.latent_consistency_models.pipeline_latent_consistency_text2img.LatentConsistencyModelPipeline.get_guidance_scale_embedding
     def get_guidance_scale_embedding(self, w, embedding_dim=512, dtype=torch.float32):
         """
@@ -816,7 +790,7 @@ class StableDiffusionCLAPPipeline(
     ):
         r"""
         Examples:
-        """
+        """  # TODO: Write up some examples!
         callback = kwargs.pop("callback", None)
         callback_steps = kwargs.pop("callback_steps", None)
 
@@ -887,17 +861,18 @@ class StableDiffusionCLAPPipeline(
         )
 
         # 3.1 Encode and project input audio
-        audio_embeds, unconditional_audio_embeds = self.encode_audio(
-            audio, audio_embeds, device
-        )
+        if audio is not None or audio_embeds is not None:
+            audio_embeds, unconditional_audio_embeds = self.encode_audio(
+                audio, audio_embeds, device
+            )
 
-        # 3.2 combine CLAP embeddings
-        prompt_embeds, negative_prompt_embeds = self.simple_project_audio(
-            audio_embeds,
-            unconditional_audio_embeds,
-            prompt_embeds,
-            negative_prompt_embeds,
-        )
+            # 3.2 combine CLAP embeddings
+            prompt_embeds, negative_prompt_embeds = self.simple_project_audio(
+                audio_embeds,
+                unconditional_audio_embeds,
+                prompt_embeds,
+                negative_prompt_embeds,
+            )
 
         # 3.3 classifier free guidance
         if self.do_classifier_free_guidance:
