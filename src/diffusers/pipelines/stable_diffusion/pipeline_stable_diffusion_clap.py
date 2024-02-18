@@ -145,6 +145,7 @@ class StableDiffusionCLAPPipeline(
         audio_encoder: ClapAudioModel,
         image_encoder: CLIPVisionModelWithProjection = None,
         requires_safety_checker: bool = True,
+        audio_embed_dim: int = 768,
     ):
         super().__init__()
 
@@ -306,9 +307,11 @@ class StableDiffusionCLAPPipeline(
 
             if clip_skip is None:
                 prompt_embeds = self.text_encoder(
-                    text_input_ids.to(device), attention_mask=attention_mask
+                    text_input_ids.to(device),
+                    attention_mask=attention_mask,
+                    # output_hidden_states=True,
                 )
-                prompt_embeds = prompt_embeds[0]
+                prompt_embeds = prompt_embeds.last_hidden_state
             else:
                 prompt_embeds = self.text_encoder(
                     text_input_ids.to(device),
@@ -326,6 +329,7 @@ class StableDiffusionCLAPPipeline(
                 prompt_embeds = self.text_encoder.text_model.final_layer_norm(
                     prompt_embeds
                 )
+                print("prompt_embeds.shape", prompt_embeds.shape)
 
         if self.text_encoder is not None:
             prompt_embeds_dtype = self.text_encoder.dtype
@@ -445,11 +449,15 @@ class StableDiffusionCLAPPipeline(
         if audio_embeds is not None:
             audio_embeddings = audio_embeds.to(device=device, dtype=dtype)
         else:
-            if not isinstance(audio, torch.Tensor):
-                audio = self.audio_processor(audio, return_tensors="pt").input_values
+            # if not isinstance(audio, torch.Tensor):
+            audio = self.audio_processor(
+                audios=audio,
+                return_tensors="pt",
+                sampling_rate=self.audio_processor.feature_extractor.sampling_rate,  # Assume that all the SR is correct
+            ).input_features
 
             audio = audio.to(device=device, dtype=dtype)
-            audio_embeddings = self.audio_encoder(**audio)
+            audio_embeddings = self.audio_encoder(audio).pooler_output
 
         uncond_audio_embeds = torch.zeros_like(audio_embeddings)
         return audio_embeddings, uncond_audio_embeds
@@ -866,17 +874,18 @@ class StableDiffusionCLAPPipeline(
                 audio, audio_embeds, device
             )
 
-            # 3.2 combine CLAP embeddings
-            prompt_embeds, negative_prompt_embeds = self.simple_project_audio(
-                audio_embeds,
-                unconditional_audio_embeds,
-                prompt_embeds,
-                negative_prompt_embeds,
-            )
+            # # 3.2 combine CLAP embeddings
+            # prompt_embeds, negative_prompt_embeds = self.simple_project_audio(
+            #     audio_embeds,
+            #     unconditional_audio_embeds,
+            #     prompt_embeds,
+            #     negative_prompt_embeds,
+            # )
 
         # 3.3 classifier free guidance
         if self.do_classifier_free_guidance:
             prompt_embeds = torch.cat([prompt_embeds, negative_prompt_embeds])
+            audio_embeds = torch.cat([audio_embeds, unconditional_audio_embeds])
 
         if ip_adapter_image is not None:
             output_hidden_state = (
@@ -911,10 +920,12 @@ class StableDiffusionCLAPPipeline(
         # 6. Prepare extra steps kwargs
         extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
 
-        # 6.1 Add image embeds for IP-Adapter
-        added_cond_kwargs = (
-            {"image_embeds": image_embeds} if ip_adapter_image is not None else None
-        )
+        # 6.1 Add image embeds for IP-Adapter and audio_embeds if audio
+        added_cond_kwargs = dict()
+        if ip_adapter_image is not None:
+            added_cond_kwargs.update({"image_embeds": image_embeds})
+        if audio_embeds is not None:
+            added_cond_kwargs.update({"audio_embeds": audio_embeds})
 
         # 6.2 Optionally get Guidance Scale embedding
         timestep_cond = None

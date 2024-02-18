@@ -68,7 +68,12 @@ def get_timestep_embedding(
 
 
 def get_2d_sincos_pos_embed(
-    embed_dim, grid_size, cls_token=False, extra_tokens=0, interpolation_scale=1.0, base_size=16
+    embed_dim,
+    grid_size,
+    cls_token=False,
+    extra_tokens=0,
+    interpolation_scale=1.0,
+    base_size=16,
 ):
     """
     grid_size: int of the grid height and width return: pos_embed: [grid_size*grid_size, embed_dim] or
@@ -77,15 +82,25 @@ def get_2d_sincos_pos_embed(
     if isinstance(grid_size, int):
         grid_size = (grid_size, grid_size)
 
-    grid_h = np.arange(grid_size[0], dtype=np.float32) / (grid_size[0] / base_size) / interpolation_scale
-    grid_w = np.arange(grid_size[1], dtype=np.float32) / (grid_size[1] / base_size) / interpolation_scale
+    grid_h = (
+        np.arange(grid_size[0], dtype=np.float32)
+        / (grid_size[0] / base_size)
+        / interpolation_scale
+    )
+    grid_w = (
+        np.arange(grid_size[1], dtype=np.float32)
+        / (grid_size[1] / base_size)
+        / interpolation_scale
+    )
     grid = np.meshgrid(grid_w, grid_h)  # here w goes first
     grid = np.stack(grid, axis=0)
 
     grid = grid.reshape([2, 1, grid_size[1], grid_size[0]])
     pos_embed = get_2d_sincos_pos_embed_from_grid(embed_dim, grid)
     if cls_token and extra_tokens > 0:
-        pos_embed = np.concatenate([np.zeros([extra_tokens, embed_dim]), pos_embed], axis=0)
+        pos_embed = np.concatenate(
+            [np.zeros([extra_tokens, embed_dim]), pos_embed], axis=0
+        )
     return pos_embed
 
 
@@ -144,7 +159,11 @@ class PatchEmbed(nn.Module):
         self.layer_norm = layer_norm
 
         self.proj = nn.Conv2d(
-            in_channels, embed_dim, kernel_size=(patch_size, patch_size), stride=patch_size, bias=bias
+            in_channels,
+            embed_dim,
+            kernel_size=(patch_size, patch_size),
+            stride=patch_size,
+            bias=bias,
         )
         if layer_norm:
             self.norm = nn.LayerNorm(embed_dim, elementwise_affine=False, eps=1e-6)
@@ -158,12 +177,22 @@ class PatchEmbed(nn.Module):
         self.base_size = height // patch_size
         self.interpolation_scale = interpolation_scale
         pos_embed = get_2d_sincos_pos_embed(
-            embed_dim, int(num_patches**0.5), base_size=self.base_size, interpolation_scale=self.interpolation_scale
+            embed_dim,
+            int(num_patches**0.5),
+            base_size=self.base_size,
+            interpolation_scale=self.interpolation_scale,
         )
-        self.register_buffer("pos_embed", torch.from_numpy(pos_embed).float().unsqueeze(0), persistent=False)
+        self.register_buffer(
+            "pos_embed",
+            torch.from_numpy(pos_embed).float().unsqueeze(0),
+            persistent=False,
+        )
 
     def forward(self, latent):
-        height, width = latent.shape[-2] // self.patch_size, latent.shape[-1] // self.patch_size
+        height, width = (
+            latent.shape[-2] // self.patch_size,
+            latent.shape[-1] // self.patch_size,
+        )
 
         latent = self.proj(latent)
         if self.flatten:
@@ -237,7 +266,9 @@ class TimestepEmbedding(nn.Module):
 
 
 class Timesteps(nn.Module):
-    def __init__(self, num_channels: int, flip_sin_to_cos: bool, downscale_freq_shift: float):
+    def __init__(
+        self, num_channels: int, flip_sin_to_cos: bool, downscale_freq_shift: float
+    ):
         super().__init__()
         self.num_channels = num_channels
         self.flip_sin_to_cos = flip_sin_to_cos
@@ -257,16 +288,25 @@ class GaussianFourierProjection(nn.Module):
     """Gaussian Fourier embeddings for noise levels."""
 
     def __init__(
-        self, embedding_size: int = 256, scale: float = 1.0, set_W_to_weight=True, log=True, flip_sin_to_cos=False
+        self,
+        embedding_size: int = 256,
+        scale: float = 1.0,
+        set_W_to_weight=True,
+        log=True,
+        flip_sin_to_cos=False,
     ):
         super().__init__()
-        self.weight = nn.Parameter(torch.randn(embedding_size) * scale, requires_grad=False)
+        self.weight = nn.Parameter(
+            torch.randn(embedding_size) * scale, requires_grad=False
+        )
         self.log = log
         self.flip_sin_to_cos = flip_sin_to_cos
 
         if set_W_to_weight:
             # to delete later
-            self.W = nn.Parameter(torch.randn(embedding_size) * scale, requires_grad=False)
+            self.W = nn.Parameter(
+                torch.randn(embedding_size) * scale, requires_grad=False
+            )
 
             self.weight = self.W
 
@@ -298,7 +338,9 @@ class SinusoidalPositionalEmbedding(nn.Module):
     def __init__(self, embed_dim: int, max_seq_length: int = 32):
         super().__init__()
         position = torch.arange(max_seq_length).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, embed_dim, 2) * (-math.log(10000.0) / embed_dim))
+        div_term = torch.exp(
+            torch.arange(0, embed_dim, 2) * (-math.log(10000.0) / embed_dim)
+        )
         pe = torch.zeros(1, max_seq_length, embed_dim)
         pe[0, :, 0::2] = torch.sin(position * div_term)
         pe[0, :, 1::2] = torch.cos(position * div_term)
@@ -355,12 +397,16 @@ class ImagePositionalEmbeddings(nn.Module):
     def forward(self, index):
         emb = self.emb(index)
 
-        height_emb = self.height_emb(torch.arange(self.height, device=index.device).view(1, self.height))
+        height_emb = self.height_emb(
+            torch.arange(self.height, device=index.device).view(1, self.height)
+        )
 
         # 1 x H x D -> 1 x H x 1 x D
         height_emb = height_emb.unsqueeze(2)
 
-        width_emb = self.width_emb(torch.arange(self.width, device=index.device).view(1, self.width))
+        width_emb = self.width_emb(
+            torch.arange(self.width, device=index.device).view(1, self.width)
+        )
 
         # 1 x W x D -> 1 x 1 x W x D
         width_emb = width_emb.unsqueeze(1)
@@ -388,7 +434,9 @@ class LabelEmbedding(nn.Module):
     def __init__(self, num_classes, hidden_size, dropout_prob):
         super().__init__()
         use_cfg_embedding = dropout_prob > 0
-        self.embedding_table = nn.Embedding(num_classes + use_cfg_embedding, hidden_size)
+        self.embedding_table = nn.Embedding(
+            num_classes + use_cfg_embedding, hidden_size
+        )
         self.num_classes = num_classes
         self.dropout_prob = dropout_prob
 
@@ -397,7 +445,9 @@ class LabelEmbedding(nn.Module):
         Drops labels to enable classifier-free guidance.
         """
         if force_drop_ids is None:
-            drop_ids = torch.rand(labels.shape[0], device=labels.device) < self.dropout_prob
+            drop_ids = (
+                torch.rand(labels.shape[0], device=labels.device) < self.dropout_prob
+            )
         else:
             drop_ids = torch.tensor(force_drop_ids == 1)
         labels = torch.where(drop_ids, self.num_classes, labels)
@@ -411,6 +461,37 @@ class LabelEmbedding(nn.Module):
         return embeddings
 
 
+class TextAudioProjection(nn.Module):
+    def __init__(
+        self,
+        text_embed_dim: int = 1024,
+        audio_embed_dim: int = 768,  # default for original Laoin CLAP
+        cross_attention_dim: int = 768,
+        num_audio_text_embeds: int = 10,
+    ):
+        super().__init__()
+
+        self.num_audio_text_embeds = num_audio_text_embeds
+        self.audio_embeds = nn.Linear(
+            audio_embed_dim, self.num_audio_text_embeds * cross_attention_dim
+        )
+        self.text_proj = nn.Linear(text_embed_dim, cross_attention_dim)
+
+    def forward(self, text_embeds: torch.FloatTensor, audio_embeds: torch.FloatTensor):
+        batch_size = text_embeds.shape[0]
+
+        # audio
+        audio_text_embeds = self.audio_embeds(audio_embeds)
+        audio_text_embeds = audio_text_embeds.reshape(
+            batch_size, self.num_audio_text_embeds, -1
+        )
+
+        # text
+        text_embeds = self.text_proj(text_embeds)
+
+        return torch.cat([audio_text_embeds, text_embeds], dim=1)
+
+
 class TextImageProjection(nn.Module):
     def __init__(
         self,
@@ -422,7 +503,9 @@ class TextImageProjection(nn.Module):
         super().__init__()
 
         self.num_image_text_embeds = num_image_text_embeds
-        self.image_embeds = nn.Linear(image_embed_dim, self.num_image_text_embeds * cross_attention_dim)
+        self.image_embeds = nn.Linear(
+            image_embed_dim, self.num_image_text_embeds * cross_attention_dim
+        )
         self.text_proj = nn.Linear(text_embed_dim, cross_attention_dim)
 
     def forward(self, text_embeds: torch.FloatTensor, image_embeds: torch.FloatTensor):
@@ -430,7 +513,9 @@ class TextImageProjection(nn.Module):
 
         # image
         image_text_embeds = self.image_embeds(image_embeds)
-        image_text_embeds = image_text_embeds.reshape(batch_size, self.num_image_text_embeds, -1)
+        image_text_embeds = image_text_embeds.reshape(
+            batch_size, self.num_image_text_embeds, -1
+        )
 
         # text
         text_embeds = self.text_proj(text_embeds)
@@ -448,7 +533,9 @@ class ImageProjection(nn.Module):
         super().__init__()
 
         self.num_image_text_embeds = num_image_text_embeds
-        self.image_embeds = nn.Linear(image_embed_dim, self.num_image_text_embeds * cross_attention_dim)
+        self.image_embeds = nn.Linear(
+            image_embed_dim, self.num_image_text_embeds * cross_attention_dim
+        )
         self.norm = nn.LayerNorm(cross_attention_dim)
 
     def forward(self, image_embeds: torch.FloatTensor):
@@ -465,13 +552,21 @@ class CombinedTimestepLabelEmbeddings(nn.Module):
     def __init__(self, num_classes, embedding_dim, class_dropout_prob=0.1):
         super().__init__()
 
-        self.time_proj = Timesteps(num_channels=256, flip_sin_to_cos=True, downscale_freq_shift=1)
-        self.timestep_embedder = TimestepEmbedding(in_channels=256, time_embed_dim=embedding_dim)
-        self.class_embedder = LabelEmbedding(num_classes, embedding_dim, class_dropout_prob)
+        self.time_proj = Timesteps(
+            num_channels=256, flip_sin_to_cos=True, downscale_freq_shift=1
+        )
+        self.timestep_embedder = TimestepEmbedding(
+            in_channels=256, time_embed_dim=embedding_dim
+        )
+        self.class_embedder = LabelEmbedding(
+            num_classes, embedding_dim, class_dropout_prob
+        )
 
     def forward(self, timestep, class_labels, hidden_dtype=None):
         timesteps_proj = self.time_proj(timestep)
-        timesteps_emb = self.timestep_embedder(timesteps_proj.to(dtype=hidden_dtype))  # (N, D)
+        timesteps_emb = self.timestep_embedder(
+            timesteps_proj.to(dtype=hidden_dtype)
+        )  # (N, D)
 
         class_labels = self.class_embedder(class_labels)  # (N, D)
 
@@ -497,7 +592,12 @@ class TextTimeEmbedding(nn.Module):
 
 
 class TextImageTimeEmbedding(nn.Module):
-    def __init__(self, text_embed_dim: int = 768, image_embed_dim: int = 768, time_embed_dim: int = 1536):
+    def __init__(
+        self,
+        text_embed_dim: int = 768,
+        image_embed_dim: int = 768,
+        time_embed_dim: int = 1536,
+    ):
         super().__init__()
         self.text_proj = nn.Linear(text_embed_dim, time_embed_dim)
         self.text_norm = nn.LayerNorm(time_embed_dim)
@@ -564,7 +664,9 @@ class AttentionPooling(nn.Module):
     def __init__(self, num_heads, embed_dim, dtype=None):
         super().__init__()
         self.dtype = dtype
-        self.positional_embedding = nn.Parameter(torch.randn(1, embed_dim) / embed_dim**0.5)
+        self.positional_embedding = nn.Parameter(
+            torch.randn(1, embed_dim) / embed_dim**0.5
+        )
         self.k_proj = nn.Linear(embed_dim, embed_dim, dtype=self.dtype)
         self.q_proj = nn.Linear(embed_dim, embed_dim, dtype=self.dtype)
         self.v_proj = nn.Linear(embed_dim, embed_dim, dtype=self.dtype)
@@ -585,7 +687,9 @@ class AttentionPooling(nn.Module):
             x = x.transpose(1, 2)
             return x
 
-        class_token = x.mean(dim=1, keepdim=True) + self.positional_embedding.to(x.dtype)
+        class_token = x.mean(dim=1, keepdim=True) + self.positional_embedding.to(
+            x.dtype
+        )
         x = torch.cat([class_token, x], dim=1)  # (bs, length+1, width)
 
         # (bs*n_heads, class_token_length, dim_per_head)
@@ -596,7 +700,9 @@ class AttentionPooling(nn.Module):
 
         # (bs*n_heads, class_token_length, length+class_token_length):
         scale = 1 / math.sqrt(math.sqrt(self.dim_per_head))
-        weight = torch.einsum("bct,bcs->bts", q * scale, k * scale)  # More stable with f16 than dividing afterwards
+        weight = torch.einsum(
+            "bct,bcs->bts", q * scale, k * scale
+        )  # More stable with f16 than dividing afterwards
         weight = torch.softmax(weight.float(), dim=-1).type(weight.dtype)
 
         # (bs*n_heads, dim_per_head, class_token_length)
@@ -621,11 +727,17 @@ class FourierEmbedder(nn.Module):
 
     def __call__(self, x):
         x = self.freq_bands * x.unsqueeze(-1)
-        return torch.stack((x.sin(), x.cos()), dim=-1).permute(0, 1, 3, 4, 2).reshape(*x.shape[:2], -1)
+        return (
+            torch.stack((x.sin(), x.cos()), dim=-1)
+            .permute(0, 1, 3, 4, 2)
+            .reshape(*x.shape[:2], -1)
+        )
 
 
 class PositionNet(nn.Module):
-    def __init__(self, positive_len, out_dim, feature_type="text-only", fourier_freqs=8):
+    def __init__(
+        self, positive_len, out_dim, feature_type="text-only", fourier_freqs=8
+    ):
         super().__init__()
         self.positive_len = positive_len
         self.out_dim = out_dim
@@ -644,7 +756,9 @@ class PositionNet(nn.Module):
                 nn.SiLU(),
                 nn.Linear(512, out_dim),
             )
-            self.null_positive_feature = torch.nn.Parameter(torch.zeros([self.positive_len]))
+            self.null_positive_feature = torch.nn.Parameter(
+                torch.zeros([self.positive_len])
+            )
 
         elif feature_type == "text-image":
             self.linears_text = nn.Sequential(
@@ -661,10 +775,16 @@ class PositionNet(nn.Module):
                 nn.SiLU(),
                 nn.Linear(512, out_dim),
             )
-            self.null_text_feature = torch.nn.Parameter(torch.zeros([self.positive_len]))
-            self.null_image_feature = torch.nn.Parameter(torch.zeros([self.positive_len]))
+            self.null_text_feature = torch.nn.Parameter(
+                torch.zeros([self.positive_len])
+            )
+            self.null_image_feature = torch.nn.Parameter(
+                torch.zeros([self.positive_len])
+            )
 
-        self.null_position_feature = torch.nn.Parameter(torch.zeros([self.position_dim]))
+        self.null_position_feature = torch.nn.Parameter(
+            torch.zeros([self.position_dim])
+        )
 
     def forward(
         self,
@@ -693,9 +813,13 @@ class PositionNet(nn.Module):
             positive_null = self.null_positive_feature.view(1, 1, -1)
 
             # replace padding with learnable null embedding
-            positive_embeddings = positive_embeddings * masks + (1 - masks) * positive_null
+            positive_embeddings = (
+                positive_embeddings * masks + (1 - masks) * positive_null
+            )
 
-            objs = self.linears(torch.cat([positive_embeddings, xyxy_embedding], dim=-1))
+            objs = self.linears(
+                torch.cat([positive_embeddings, xyxy_embedding], dim=-1)
+            )
 
         # positionet with text and image infomation
         else:
@@ -707,11 +831,19 @@ class PositionNet(nn.Module):
             image_null = self.null_image_feature.view(1, 1, -1)
 
             # replace padding with learnable null embedding
-            phrases_embeddings = phrases_embeddings * phrases_masks + (1 - phrases_masks) * text_null
-            image_embeddings = image_embeddings * image_masks + (1 - image_masks) * image_null
+            phrases_embeddings = (
+                phrases_embeddings * phrases_masks + (1 - phrases_masks) * text_null
+            )
+            image_embeddings = (
+                image_embeddings * image_masks + (1 - image_masks) * image_null
+            )
 
-            objs_text = self.linears_text(torch.cat([phrases_embeddings, xyxy_embedding], dim=-1))
-            objs_image = self.linears_image(torch.cat([image_embeddings, xyxy_embedding], dim=-1))
+            objs_text = self.linears_text(
+                torch.cat([phrases_embeddings, xyxy_embedding], dim=-1)
+            )
+            objs_image = self.linears_image(
+                torch.cat([image_embeddings, xyxy_embedding], dim=-1)
+            )
             objs = torch.cat([objs_text, objs_image], dim=1)
 
         return objs
@@ -725,19 +857,31 @@ class CombinedTimestepSizeEmbeddings(nn.Module):
     https://github.com/PixArt-alpha/PixArt-alpha/blob/0f55e922376d8b797edd44d25d0e7464b260dcab/diffusion/model/nets/PixArtMS.py#L164C9-L168C29
     """
 
-    def __init__(self, embedding_dim, size_emb_dim, use_additional_conditions: bool = False):
+    def __init__(
+        self, embedding_dim, size_emb_dim, use_additional_conditions: bool = False
+    ):
         super().__init__()
 
         self.outdim = size_emb_dim
-        self.time_proj = Timesteps(num_channels=256, flip_sin_to_cos=True, downscale_freq_shift=0)
-        self.timestep_embedder = TimestepEmbedding(in_channels=256, time_embed_dim=embedding_dim)
+        self.time_proj = Timesteps(
+            num_channels=256, flip_sin_to_cos=True, downscale_freq_shift=0
+        )
+        self.timestep_embedder = TimestepEmbedding(
+            in_channels=256, time_embed_dim=embedding_dim
+        )
 
         self.use_additional_conditions = use_additional_conditions
         if use_additional_conditions:
             self.use_additional_conditions = True
-            self.additional_condition_proj = Timesteps(num_channels=256, flip_sin_to_cos=True, downscale_freq_shift=0)
-            self.resolution_embedder = TimestepEmbedding(in_channels=256, time_embed_dim=size_emb_dim)
-            self.aspect_ratio_embedder = TimestepEmbedding(in_channels=256, time_embed_dim=size_emb_dim)
+            self.additional_condition_proj = Timesteps(
+                num_channels=256, flip_sin_to_cos=True, downscale_freq_shift=0
+            )
+            self.resolution_embedder = TimestepEmbedding(
+                in_channels=256, time_embed_dim=size_emb_dim
+            )
+            self.aspect_ratio_embedder = TimestepEmbedding(
+                in_channels=256, time_embed_dim=size_emb_dim
+            )
 
     def apply_condition(self, size: torch.Tensor, batch_size: int, embedder: nn.Module):
         if size.ndim == 1:
@@ -746,7 +890,9 @@ class CombinedTimestepSizeEmbeddings(nn.Module):
         if size.shape[0] != batch_size:
             size = size.repeat(batch_size // size.shape[0], 1)
             if size.shape[0] != batch_size:
-                raise ValueError(f"`batch_size` should be {size.shape[0]} but found {batch_size}.")
+                raise ValueError(
+                    f"`batch_size` should be {size.shape[0]} but found {batch_size}."
+                )
 
         current_batch_size, dims = size.shape[0], size.shape[1]
         size = size.reshape(-1)
@@ -758,10 +904,14 @@ class CombinedTimestepSizeEmbeddings(nn.Module):
 
     def forward(self, timestep, resolution, aspect_ratio, batch_size, hidden_dtype):
         timesteps_proj = self.time_proj(timestep)
-        timesteps_emb = self.timestep_embedder(timesteps_proj.to(dtype=hidden_dtype))  # (N, D)
+        timesteps_emb = self.timestep_embedder(
+            timesteps_proj.to(dtype=hidden_dtype)
+        )  # (N, D)
 
         if self.use_additional_conditions:
-            resolution = self.apply_condition(resolution, batch_size=batch_size, embedder=self.resolution_embedder)
+            resolution = self.apply_condition(
+                resolution, batch_size=batch_size, embedder=self.resolution_embedder
+            )
             aspect_ratio = self.apply_condition(
                 aspect_ratio, batch_size=batch_size, embedder=self.aspect_ratio_embedder
             )
@@ -781,10 +931,17 @@ class CaptionProjection(nn.Module):
 
     def __init__(self, in_features, hidden_size, num_tokens=120):
         super().__init__()
-        self.linear_1 = nn.Linear(in_features=in_features, out_features=hidden_size, bias=True)
+        self.linear_1 = nn.Linear(
+            in_features=in_features, out_features=hidden_size, bias=True
+        )
         self.act_1 = nn.GELU(approximate="tanh")
-        self.linear_2 = nn.Linear(in_features=hidden_size, out_features=hidden_size, bias=True)
-        self.register_buffer("y_embedding", nn.Parameter(torch.randn(num_tokens, in_features) / in_features**0.5))
+        self.linear_2 = nn.Linear(
+            in_features=hidden_size, out_features=hidden_size, bias=True
+        )
+        self.register_buffer(
+            "y_embedding",
+            nn.Parameter(torch.randn(num_tokens, in_features) / in_features**0.5),
+        )
 
     def forward(self, caption, force_drop_ids=None):
         hidden_states = self.linear_1(caption)
@@ -825,7 +982,9 @@ class Resampler(nn.Module):
         super().__init__()
         from .attention import FeedForward  # Lazy import to avoid circular import
 
-        self.latents = nn.Parameter(torch.randn(1, num_queries, hidden_dims) / hidden_dims**0.5)
+        self.latents = nn.Parameter(
+            torch.randn(1, num_queries, hidden_dims) / hidden_dims**0.5
+        )
 
         self.proj_in = nn.Linear(embed_dims, hidden_dims)
 
@@ -847,7 +1006,13 @@ class Resampler(nn.Module):
                         ),
                         nn.Sequential(
                             nn.LayerNorm(hidden_dims),
-                            FeedForward(hidden_dims, hidden_dims, activation_fn="gelu", mult=ffn_ratio, bias=False),
+                            FeedForward(
+                                hidden_dims,
+                                hidden_dims,
+                                activation_fn="gelu",
+                                mult=ffn_ratio,
+                                bias=False,
+                            ),
                         ),
                     ]
                 )
