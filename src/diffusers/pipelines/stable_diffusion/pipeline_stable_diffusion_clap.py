@@ -1005,6 +1005,8 @@ class StableDiffusionCLAPPipeline(
                     if callback is not None and i % callback_steps == 0:
                         step_idx = i // getattr(self.scheduler, "order", 1)
                         callback(step_idx, t, latents)
+
+        latents = latents.to(dtype=self.vae.dtype)
         if not output_type == "latent":
             image = self.vae.decode(
                 latents / self.vae.config.scaling_factor,
