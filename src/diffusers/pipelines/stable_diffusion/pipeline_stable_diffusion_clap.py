@@ -833,7 +833,6 @@ class StableDiffusionCLAPPipeline(
 
         # 3.1 Encode and project input audio
         if audio is not None or audio_embeds is not None:
-            print("Audio layer")
             audio_embeds, unconditional_audio_embeds = self.encode_audio(
                 audio, audio_embeds, device
             )
@@ -962,6 +961,7 @@ class StableDiffusionCLAPPipeline(
                         callback(step_idx, t, latents)
 
         if not output_type == "latent":
+            latents = latents.to(dtype=self.vae.dtype)
             image = self.vae.decode(
                 latents / self.vae.config.scaling_factor,
                 return_dict=False,

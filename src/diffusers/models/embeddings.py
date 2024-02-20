@@ -476,7 +476,7 @@ class TextAudioProjection(nn.Module):
         self.audio_embeds = nn.Linear(
             audio_embed_dim, self.num_audio_text_embeds * cross_attention_dim
         )
-        self.text_proj = nn.Linear(text_embed_dim, cross_attention_dim)
+        # self.text_proj = nn.Linear(text_embed_dim, cross_attention_dim)
 
     def forward(self, text_embeds: torch.FloatTensor, audio_embeds: torch.FloatTensor):
         batch_size = text_embeds.shape[0]
@@ -487,9 +487,9 @@ class TextAudioProjection(nn.Module):
             batch_size, self.num_audio_text_embeds, -1
         )
 
-        # text only if needed
-        if text_embeds.shape[-1] != self.text_embed_dim:
-            text_embeds = self.text_proj(text_embeds)
+        # # text only if needed
+        # if text_embeds.shape[-1] != self.text_embed_dim:
+        #     text_embeds = self.text_proj(text_embeds)
 
         return torch.cat([audio_text_embeds, text_embeds], dim=1)
 
