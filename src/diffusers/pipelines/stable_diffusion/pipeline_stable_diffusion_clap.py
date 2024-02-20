@@ -164,6 +164,35 @@ class StableDiffusionCLAPPipeline(
                 " checker. If you do not want to use the safety checker, you can pass `'safety_checker=None'` instead."
             )
 
+        is_unet_version_less_0_9_0 = hasattr(
+            unet.config, "_diffusers_version"
+        ) and version.parse(
+            version.parse(unet.config._diffusers_version).base_version
+        ) < version.parse(
+            "0.9.0.dev0"
+        )
+        is_unet_sample_size_less_64 = (
+            hasattr(unet.config, "sample_size") and unet.config.sample_size < 64
+        )
+        if is_unet_version_less_0_9_0 and is_unet_sample_size_less_64:
+            deprecation_message = (
+                "The configuration file of the unet has set the default `sample_size` to smaller than"
+                " 64 which seems highly unlikely. If your checkpoint is a fine-tuned version of any of the"
+                " following: \n- CompVis/stable-diffusion-v1-4 \n- CompVis/stable-diffusion-v1-3 \n-"
+                " CompVis/stable-diffusion-v1-2 \n- CompVis/stable-diffusion-v1-1 \n- runwayml/stable-diffusion-v1-5"
+                " \n- runwayml/stable-diffusion-inpainting \n you should change 'sample_size' to 64 in the"
+                " configuration file. Please make sure to update the config accordingly as leaving `sample_size=32`"
+                " in the config might lead to incorrect results in future versions. If you have downloaded this"
+                " checkpoint from the Hugging Face Hub, it would be very nice if you could open a Pull request for"
+                " the `unet/config.json` file"
+            )
+            deprecate(
+                "sample_size<64", "1.0.0", deprecation_message, standard_warn=False
+            )
+            new_config = dict(unet.config)
+            new_config["sample_size"] = 64
+            unet._internal_dict = FrozenDict(new_config)
+
         self.register_modules(
             vae=vae,
             text_encoder=text_encoder,
@@ -752,6 +781,7 @@ class StableDiffusionCLAPPipeline(
         ip_adapter_image: Optional[PipelineImageInput] = None,
         output_type: Optional[str] = "pil",
         return_dict: bool = True,
+        added_cond_kwargs: Optional[Dict[str, Any]] = None,
         cross_attention_kwargs: Optional[Dict[str, Any]] = None,
         guidance_rescale: float = 0.0,
         clip_skip: Optional[int] = None,
@@ -831,17 +861,17 @@ class StableDiffusionCLAPPipeline(
             clip_skip=self.clip_skip,
         )
 
-        # 3.1 Encode and project input audio
+        # 3.1 Encode audio
         if audio is not None or audio_embeds is not None:
             audio_embeds, unconditional_audio_embeds = self.encode_audio(
                 audio, audio_embeds, device
             )
 
-        # 3.3 classifier free guidance
+        # For classifier free guidance, we need to do two forward passes.
+        # Here we concatenate the unconditional and text embeddings into a single batch
+        # to avoid doing two forward passes
         if self.do_classifier_free_guidance:
-            prompt_embeds = torch.cat([prompt_embeds, negative_prompt_embeds])
-            if audio_embeds is not None:
-                audio_embeds = torch.cat([audio_embeds, unconditional_audio_embeds])
+            prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds])
 
         if ip_adapter_image is not None:
             output_hidden_state = (
@@ -860,7 +890,7 @@ class StableDiffusionCLAPPipeline(
             self.scheduler, num_inference_steps, device, timesteps
         )
 
-        # 5. prepare latent variables
+        # 5. Prepare latent variables
         num_channels_latents = self.unet.config.in_channels
         latents = self.prepare_latents(
             batch_size * num_images_per_prompt,
@@ -882,7 +912,9 @@ class StableDiffusionCLAPPipeline(
             added_cond_kwargs.update({"image_embeds": image_embeds})
         if audio_embeds is not None:
             added_cond_kwargs.update({"audio_embeds": audio_embeds})
-
+        if len(added_cond_kwargs) == 0:
+            added_cond_kwargs = None
+            
         # 6.2 Optionally get Guidance Scale Embedding
         timestep_cond = None
         if self.unet.config.time_cond_proj_dim is not None:
