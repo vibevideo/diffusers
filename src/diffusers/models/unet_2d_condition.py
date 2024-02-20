@@ -1172,11 +1172,7 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
             self.encoder_hid_proj is not None
             and self.config.encoder_hid_dim_type == "text_audio_proj"
         ):
-            # if added_cond_kwargs is not None and "audio_embeds" not in added_cond_kwargs:
-            #     raise ValueError(
-            #         f"{self.__class__} has the config param `encoder_hid_dim_type` set to 'text_audio_proj' which requires the keyword argument `audio_embeds` to be passed in  `added_conditions`"
-            #     )
-            if "audio_embeds" in added_cond_kwargs:
+            if added_cond_kwargs is not None and "audio_embeds" in added_cond_kwargs:
                 audio_embeds = added_cond_kwargs.get("audio_embeds")
                 encoder_hidden_states = self.encoder_hid_proj(
                     encoder_hidden_states, audio_embeds

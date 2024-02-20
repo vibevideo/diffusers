@@ -307,11 +307,9 @@ class StableDiffusionCLAPPipeline(
 
             if clip_skip is None:
                 prompt_embeds = self.text_encoder(
-                    text_input_ids.to(device),
-                    attention_mask=attention_mask,
-                    # output_hidden_states=True,
+                    text_input_ids.to(device), attention_mask=attention_mask
                 )
-                prompt_embeds = prompt_embeds.last_hidden_state
+                prompt_embeds = prompt_embeds[0]
             else:
                 prompt_embeds = self.text_encoder(
                     text_input_ids.to(device),
@@ -329,7 +327,6 @@ class StableDiffusionCLAPPipeline(
                 prompt_embeds = self.text_encoder.text_model.final_layer_norm(
                     prompt_embeds
                 )
-                print("prompt_embeds.shape", prompt_embeds.shape)
 
         if self.text_encoder is not None:
             prompt_embeds_dtype = self.text_encoder.dtype
@@ -461,40 +458,6 @@ class StableDiffusionCLAPPipeline(
 
         uncond_audio_embeds = torch.zeros_like(audio_embeddings)
         return audio_embeddings, uncond_audio_embeds
-
-    def simple_project_audio(
-        self,
-        audio_embeds: torch.FloatTensor,
-        unconditional_audio_embeds: torch.Tensor,
-        prompt_embeds: torch.FloatTensor,
-        negative_prompt_embeds: torch.FloatTensor,
-    ) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
-        """Simplified projection of audio embeddings. This simply replaces the final
-        embedding of the incoming text prompts with the clap embeddings. Adds for both
-        negative and positive prompts.
-
-        Args:
-            audio_embeds (torch.FloatTensor): audio embeddings
-            unconditional_audio_embeds (torch.Tensor): unconditional audio embeddings
-            prompt_embeds (torch.FloatTensor): prompt embeddings
-            negative_prompt_embeds (torch.FloatTensor): negative prompt embeddings
-
-        Returns:
-            Tuple[torch.FloatTensor, torch.FloatTensor]: prompt embeds with the final embedding replaced by the auddio embeddings
-        """
-        if audio_embeds.shape[0] != prompt_embeds.shape[0]:
-            raise ValueError(
-                f"Audio embeddings and prompt embeddings must have the same batch size, but got {audio_embeds.shape[0]} != {prompt_embeds.shape[0]}."
-            )
-        if unconditional_audio_embeds.shape[0] != negative_prompt_embeds.shape[0]:
-            raise ValueError(
-                f"Unconditional audio embeddings and negative prompt embeddings must have the same batch size, but got {unconditional_audio_embeds.shape[0]} != {negative_prompt_embeds.shape[0]}."
-            )
-
-        prompt_embeds[:, -1, :] = audio_embeds
-        negative_prompt_embeds[:, -1, :] = unconditional_audio_embeds
-
-        return prompt_embeds, negative_prompt_embeds
 
     def encode_image(
         self, image, device, num_images_per_prompt, output_hidden_states=None
@@ -812,7 +775,7 @@ class StableDiffusionCLAPPipeline(
             deprecate(
                 "callback_steps",
                 "1.0.0",
-                "Passing `callback` as an input argument to `__call__` is deprecated, consider using `callback_on_step_end`",
+                "Passing `callback_steps` as an input argument to `__call__` is deprecated, consider using `callback_on_step_end`",
             )
 
         # 0. Default height and width to unet
@@ -820,7 +783,7 @@ class StableDiffusionCLAPPipeline(
         width = width or self.unet.config.sample_size * self.vae_scale_factor
         # to deal with lora scaling and other possible forward hooks
 
-        # 1. Check inputs, Raise error if not correct
+        # 1. Check inputs. Raise error if not correct
         self.check_inputs(
             prompt,
             audio,
@@ -870,22 +833,16 @@ class StableDiffusionCLAPPipeline(
 
         # 3.1 Encode and project input audio
         if audio is not None or audio_embeds is not None:
+            print("Audio layer")
             audio_embeds, unconditional_audio_embeds = self.encode_audio(
                 audio, audio_embeds, device
             )
 
-            # # 3.2 combine CLAP embeddings
-            # prompt_embeds, negative_prompt_embeds = self.simple_project_audio(
-            #     audio_embeds,
-            #     unconditional_audio_embeds,
-            #     prompt_embeds,
-            #     negative_prompt_embeds,
-            # )
-
         # 3.3 classifier free guidance
         if self.do_classifier_free_guidance:
             prompt_embeds = torch.cat([prompt_embeds, negative_prompt_embeds])
-            audio_embeds = torch.cat([audio_embeds, unconditional_audio_embeds])
+            if audio_embeds is not None:
+                audio_embeds = torch.cat([audio_embeds, unconditional_audio_embeds])
 
         if ip_adapter_image is not None:
             output_hidden_state = (
@@ -927,7 +884,7 @@ class StableDiffusionCLAPPipeline(
         if audio_embeds is not None:
             added_cond_kwargs.update({"audio_embeds": audio_embeds})
 
-        # 6.2 Optionally get Guidance Scale embedding
+        # 6.2 Optionally get Guidance Scale Embedding
         timestep_cond = None
         if self.unet.config.time_cond_proj_dim is not None:
             guidance_scale_tensor = torch.tensor(self.guidance_scale - 1).repeat(
@@ -942,7 +899,7 @@ class StableDiffusionCLAPPipeline(
         self._num_timesteps = len(timesteps)
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             for i, t in enumerate(timesteps):
-                # expand the latents if we are doing CFG
+                # expand the latents if we are doing classifier free guidance
                 latent_model_input = (
                     torch.cat([latents] * 2)
                     if self.do_classifier_free_guidance
@@ -966,10 +923,8 @@ class StableDiffusionCLAPPipeline(
                 # perform guidance
                 if self.do_classifier_free_guidance:
                     noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
-                    noise_pred = (
-                        noise_pred_uncond
-                        * self.guidance_scale
-                        * (noise_pred_text - noise_pred_uncond)
+                    noise_pred = noise_pred_uncond + self.guidance_scale * (
+                        noise_pred_text - noise_pred_uncond
                     )
 
                 if self.do_classifier_free_guidance and self.guidance_rescale > 0.0:
@@ -980,7 +935,7 @@ class StableDiffusionCLAPPipeline(
                         guidance_rescale=self.guidance_rescale,
                     )
 
-                # compute the previous noise samnple x_t -> x_t-1
+                # compute the previous noisy sample x_t -> x_t-1
                 latents = self.scheduler.step(
                     noise_pred, t, latents, **extra_step_kwargs, return_dict=False
                 )[0]
@@ -997,7 +952,7 @@ class StableDiffusionCLAPPipeline(
                         "negative_prompt_embeds", negative_prompt_embeds
                     )
 
-                # call the callback if provided
+                # call the callback, if provided
                 if i == len(timesteps) - 1 or (
                     (i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0
                 ):
@@ -1006,7 +961,6 @@ class StableDiffusionCLAPPipeline(
                         step_idx = i // getattr(self.scheduler, "order", 1)
                         callback(step_idx, t, latents)
 
-        latents = latents.to(dtype=self.vae.dtype)
         if not output_type == "latent":
             image = self.vae.decode(
                 latents / self.vae.config.scaling_factor,
@@ -1016,7 +970,6 @@ class StableDiffusionCLAPPipeline(
             image, has_nsfw_concept = self.run_safety_checker(
                 image, device, prompt_embeds.dtype
             )
-
         else:
             image = latents
             has_nsfw_concept = None
@@ -1030,7 +983,7 @@ class StableDiffusionCLAPPipeline(
             image, output_type=output_type, do_denormalize=do_denormalize
         )
 
-        # Offload all models and return
+        # Offload all models
         self.maybe_free_model_hooks()
 
         if not return_dict:
