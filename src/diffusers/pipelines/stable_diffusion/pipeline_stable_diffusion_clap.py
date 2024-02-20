@@ -872,6 +872,8 @@ class StableDiffusionCLAPPipeline(
         # to avoid doing two forward passes
         if self.do_classifier_free_guidance:
             prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds])
+            if audio_embeds is not None:
+                audio_embeds = torch.cat([unconditional_audio_embeds, audio_embeds])
 
         if ip_adapter_image is not None:
             output_hidden_state = (
@@ -914,7 +916,7 @@ class StableDiffusionCLAPPipeline(
             added_cond_kwargs.update({"audio_embeds": audio_embeds})
         if len(added_cond_kwargs) == 0:
             added_cond_kwargs = None
-            
+
         # 6.2 Optionally get Guidance Scale Embedding
         timestep_cond = None
         if self.unet.config.time_cond_proj_dim is not None:
